@@ -86,10 +86,8 @@ def plotLinePMissionMap(figdir='./figs/', outname='LinePMissionMap.png', dpi=200
     print(glider.time[-1].values)
     # make a 6-h interp of this...
     dt = np.timedelta64(6*3600, 's')
-    time = np.arange(glider.time[-1].values, glider.time[0].values, -dt)
+    time = np.arange(glider.time[-1].values, glider.time[0].values, -dt)[::-1]
 
-
-    print('time', time)
     glider6h = xr.Dataset(coords={'time': time,
                                   'timemid': time[:-1] + dt / 2})
 
