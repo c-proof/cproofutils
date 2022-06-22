@@ -68,6 +68,41 @@ code!
 
 _log = logging.getLogger(__name__)
 
+def ticker(dir):
+
+#jpnote:
+# Function to calculate distance traveled by gliders
+# For every mission directory where L0-timeseries exists,
+# extract distance_over_ground and sum
+# Written into html file, and put directly into cproofwesbite/_includes/
+# directory, and then added using jekyll {% include %}
+
+    sump = 0                   # set variable to 0
+    subdirs = glob.glob(dir + '/dfo-*')
+   # atts = []
+    for d in subdirs:
+        if os.path.isdir(d):   #define subdirs so that only go into directories that start with 'dfo-*'
+            if 1:
+                _log.info(d)
+                nc = sorted(glob.glob(d+'/*/L0-timeseries/*.nc'), key=os.path.getmtime)
+                with xr.open_dataset(nc[-1]) as ds:  #open most recent of sorted netcdf files (last, [-1])
+
+                    sump += ds.variables['distance_over_ground'].data[-1]                   # Add last element of dataset to final sum                    
+                    list_ = np.where(ds.variables['distance_over_ground'].data==0)          # Locate where in distance over ground there is a 0,                    
+                    flattened = [val for sublist in list_ for val in sublist]               # List comprhension to allow traversal through list
+
+                    for i in flattened:
+                        sump += ds.variables['distance_over_ground'].data[i-1]              # add number before every 0 appearance to final sum
+
+   # print('final sum', "{:.f}".format(sump)) #final sum print check
+   # print('final sum', int(sump)) #final sum print check
+
+    with open('/Users/cproof/cproofwebsite/_includes/inputfile.html', 'w') as output_file:  #output to html file in website directory
+        output_file.write(str(int(sump)))
+
+#######
+
+
 def index_deployments(dir, templatedir='./.templates/'):
     """
     Get useful info from deployments under "dir" and add to an
