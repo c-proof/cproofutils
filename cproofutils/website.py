@@ -84,9 +84,9 @@ def ticker(dir):
         if os.path.isdir(d):   #define subdirs so that only go into directories that start with 'dfo-*'
             if 1:
                 _log.info(d)
-                nc = sorted(glob.glob(d+'/*/L0-timeseries/*.nc'), key=os.path.getmtime)
+                nc = sorted(glob.glob(d+'/L0-timeseries/*.nc'), key=os.path.getmtime)
                 if len(nc) < 1:
-                    nc = sorted(glob.glob(d+'/*/L1-timeseries/*.nc'), key=os.path.getmtime)
+                    nc = sorted(glob.glob(d+'/L1-timeseries/*.nc'), key=os.path.getmtime)
                     if len(nc) < 1:
                         continue
                 with xr.open_dataset(nc[-1]) as ds:  #open most recent of sorted netcdf files (last, [-1])
