@@ -85,8 +85,9 @@ def ticker(dir):
             if 1:
                 _log.info(d)
                 nc = sorted(glob.glob(d+'/*/L0-timeseries/*.nc'), key=os.path.getmtime)
+                    if len(nc) < 1:
+                        continue
                 with xr.open_dataset(nc[-1]) as ds:  #open most recent of sorted netcdf files (last, [-1])
-
                     sump += ds.variables['distance_over_ground'].data[-1]                   # Add last element of dataset to final sum                    
                     list_ = np.where(ds.variables['distance_over_ground'].data==0)          # Locate where in distance over ground there is a 0,                    
                     flattened = [val for sublist in list_ for val in sublist]               # List comprhension to allow traversal through list
