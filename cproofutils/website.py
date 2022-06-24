@@ -95,7 +95,8 @@ def ticker(dir):
                     flattened = [val for sublist in list_ for val in sublist]               # List comprhension to allow traversal through list
 
                     for i in flattened:
-                        sump += ds.variables['distance_over_ground'].data[i-1]              # add number before every 0 appearance to final sum
+                        if i>0:    
+                            sump += ds.variables['distance_over_ground'].data[i-1]              # add number before every 0 appearance to final sum
 
    # print('final sum', "{:.f}".format(sump)) #final sum print check
    # print('final sum', int(sump)) #final sum print check
