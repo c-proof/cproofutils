@@ -56,7 +56,7 @@ def timeseries_plots(fname, plottingyaml):
         # map!
         fig1, axs1 = plt.subplots(figsize=(7.5, 7.5))
         ax = axs1
-        good = (ds.longitude < -125)
+        good = (ds.longitude < -120)
         ax.plot(ds.longitude[good], ds.latitude[good], '.',markersize=1)
 
         #ax.plot(ds.longitude, ds.latitude, '.') #jp commented
