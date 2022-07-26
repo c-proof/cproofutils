@@ -11,6 +11,9 @@ import pyglider.utils as pygu
 
 import logging
 
+import argopandas as argo
+import pandas as pd
+
 """
 Utilities to make smart directories for the websites.
 
@@ -197,7 +200,7 @@ def geojson_deployments(dir, outfile='cproof-deployments.geojson'):
     subdirs = glob.glob(dir + '/*')
     features = []
 
-    kml = simplekml.Kml()
+    #kml = simplekml.Kml()
 
     np.random.seed(20190101)
     _log.debug(f'subdirs, {subdirs}')
@@ -208,6 +211,7 @@ def geojson_deployments(dir, outfile='cproof-deployments.geojson'):
             subdirs2 = glob.glob(d + '/*')
             for d2 in subdirs2:
                 _log.info(d2)
+                kml = simplekml.Kml()  #note: put kml in for loop
                 if os.path.isdir(d2):
                     try:
                         nc = glob.glob(d2+'/L0-gridfiles/*.nc')
@@ -218,7 +222,7 @@ def geojson_deployments(dir, outfile='cproof-deployments.geojson'):
                         with xr.open_dataset(nc[0]) as ds:
                             _log.info(f'opened {nc[0]}')
                             att = ds.attrs
-                            good = (ds.longitude < -125)
+                            good = (ds.longitude < -120)
                             line = np.vstack((ds.longitude[good], ds.latitude[good])).T
                             ls = geojson.LineString(line.tolist())
                             feat = geojson.Feature(geometry=ls)
@@ -264,5 +268,46 @@ def geojson_deployments(dir, outfile='cproof-deployments.geojson'):
                         _log.info(f'Could not find grid file {d2}')
     feature_collection = geojson.FeatureCollection(features)
     with open(outfile, 'w') as fout:
+        s = geojson.dumps(feature_collection)
+        fout.write(s)
+######
+# julia putko addition: add to different geojson file: Glider + ARGO for the C-PROOF website home page
+######
+    floatsmeds_bgc_floats = argo.bio_prof[argo.bio_prof['file'].str.contains('meds')]
+    my_wmos = [4902549,4902550, 4902551, 4902552,4902553,4902554,4902555,4902583,4902584,4902585,4902586,4902587,4902588,4902589]
+   # Adding additional ARGO float numbers
+
+    df = pd.DataFrame()
+
+    coords = []
+    for f in argo.float(my_wmos):
+        for row in f.prof:
+           # if f.prof.latitude > 0:  #make not nan
+            lat = f.prof.latitude
+            lon = f.prof.longitude
+
+            line = np.vstack((f.prof.longitude, f.prof.latitude)).T
+              # line = np.vstack((f.prof.longitude, f.prof.latitude)).T
+            mask = np.all(np.isnan(line), axis=1)
+            line = line[~mask]
+            ls = geojson.LineString(line.tolist())
+            feat = geojson.Feature(geometry=ls)
+
+            # get color:
+            cols = np.random.randint(0, 200, 3)
+            colornum += 1
+            feat.properties['color'] = '#%02X%02X%02X' % (cols[0], cols[1], cols[2])
+            feat.properties['name'] = 'argo'
+          #  if ds['time'][-1] > np.datetime64(datetime.datetime.now()) - np.timedelta64(2, 'D'):
+           #     feat.properties['active'] = True
+          #  else:
+           #     feat.properties['active'] = False  ?? current status ??
+
+        features += [feat]
+####
+
+    #jpnote: Addition of separate outfile that contains argo float data as well as glider mission data
+    feature_collection = geojson.FeatureCollection(features)
+    with open('cproof-deployments_all.geojson', 'w') as fout:
         s = geojson.dumps(feature_collection)
         fout.write(s)
