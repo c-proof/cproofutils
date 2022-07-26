@@ -298,10 +298,10 @@ def geojson_deployments(dir, outfile='cproof-deployments.geojson'):
             colornum += 1
             feat.properties['color'] = '#%02X%02X%02X' % (cols[0], cols[1], cols[2])
             feat.properties['name'] = 'argo'
-          #  if ds['time'][-1] > np.datetime64(datetime.datetime.now()) - np.timedelta64(2, 'D'):
-           #     feat.properties['active'] = True
-          #  else:
-           #     feat.properties['active'] = False  ?? current status ??
+            if ds['time'][-1] > np.datetime64(datetime.datetime.now()) - np.timedelta64(7, 'D'):
+                feat.properties['active'] = True
+            else:
+                feat.properties['active'] = False  #?? current status ??
 
         features += [feat]
 ####
