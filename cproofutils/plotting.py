@@ -317,7 +317,7 @@ def grid_plots(fname, plottingyaml):
         tmean = ds.temperature.mean(axis=1)
         indmax = np.where(~np.isnan(tmean))[0][-1]
         depmax = ds.depth[indmax]
-        fig, axs = plt.subplots(int(N / 2), 2, figsize=(7.5, 7),
+        fig, axs = plt.subplots(int(math.ceil(N / 2)), 2, figsize=(7.5, 7),
                                 sharex=True, sharey=True, constrained_layout=True)
         axs = axs.flat
         for n, k in enumerate(keys):
