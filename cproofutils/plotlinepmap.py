@@ -123,14 +123,13 @@ def plotLinePMissionMap(figdir='./figs/', linename='linep',
     sincelast = utcnow - (glider6h.time.values[-1].astype('datetime64[s]')).tolist()
     sincelast = str(sincelast)[:-10]
 
-
     # figure out how far we have to go:
     total = (lineP['dist'][0] - lineP['dist'][-1]) * 2
     dist_to_lineP = glider6h.distLineP[-1] - lineP['dist'][-1]
     print(total, dist_to_lineP.values)
     if glider6h.lon.min() < -144.5 and glider6h.speedLineP[-6] > 0:
         # we are returning
-        dist_to_go = lineP['dist'][0] - glider6h.distLineP
+        dist_to_go = lineP['dist'][0] - glider6h.distLineP[-1]
     else:
         dist_to_go = total / 2 + dist_to_lineP
 
@@ -138,7 +137,7 @@ def plotLinePMissionMap(figdir='./figs/', linename='linep',
     try:
         predTime = glider6h.time[-1].values + np.timedelta64(int(dist_to_go / np.abs(latestLinePspeed) * 24 * 3600), 's')
         predTime = f'{predTime}'[:10]
-    except OverflowError:
+    except (OverflowError):
         predTime ='Bad data'
 
     # Plots:
