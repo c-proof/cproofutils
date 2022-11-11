@@ -274,7 +274,7 @@ def geojson_deployments(dir, outfile='cproof-deployments.geojson'):
 # julia putko addition: add to different geojson file: Glider + ARGO for the C-PROOF website home page
 ######
     floatsmeds_bgc_floats = argo.bio_prof[argo.bio_prof['file'].str.contains('meds')]
-    my_wmos = [4902549,4902550, 4902551, 4902552,4902553,4902554,4902555,4902583,4902584,4902585,4902586,4902587,4902588,4902589]
+    my_wmos = [4902549,4902550, 4902551, 4902552,4902553,4902554,4902555,4902583,4902584,4902585,4902586,4902587,4902588,4902589,4902612,4902613,4902616]
    # Adding additional ARGO float numbers
 
     df = pd.DataFrame()
