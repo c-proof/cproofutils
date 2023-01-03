@@ -50,7 +50,8 @@ def get_line_info(linename):
 def plotCalvertMissionMap(figdir='./figs/', linename='calvert',
                         outname='CalvertMissionMap.png', dpi=200, logdir='./logs',
                         lonlim=[-132, -126.5], latlim=[50.5, 52],
-                        topofile = '~cproof/Sites/gliderdata/smith_sandwell_topo_v8_2.nc'):
+                        topofile = '~cproof/Sites/gliderdata/smith_sandwell_topo_v8_2.nc',
+                        start=np.datetime64('1970-01-01')):
 
     utcnow = datetime.datetime.utcnow()
 
@@ -61,7 +62,9 @@ def plotCalvertMissionMap(figdir='./figs/', linename='calvert',
     fns.sort()
     print(fns)
     glider = parse_logfiles(fns)
+    glider = glider.where()
     glider = glider.dropna(dim='surfacing')
+    glider = glider.sel(surfacing=(glider.time>start))
     # get a distance along line.  Simple interp in lon which is prob OK here
     glider['Calvertdist'] = ('surfacing', np.interp(glider['lon'],
                             Calvert['wps'][::-1, -1], Calvert['dist'][::-1]))
@@ -115,6 +118,7 @@ def plotCalvertMissionMap(figdir='./figs/', linename='calvert',
         predTime = f'{predTime}'[:10]
     except (OverflowError):
         predTime ='Bad data'
+
 
     # Plots:
 
