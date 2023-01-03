@@ -248,7 +248,6 @@ def timeseries_plots(fname, plottingyaml):
         fig, axs = plt.subplots(1, 2, constrained_layout=True, sharey=True)
         ax = axs[0]
 
-        ds['oxygen_concentration'][ ds['oxygen_concentration']==9999]=np.nan
         good = ~np.isnan(ds.salinity)
         smin, smax = _autoclim(ds.salinity[good])
         good = ~np.isnan(ds.temperature)
@@ -271,6 +270,7 @@ def timeseries_plots(fname, plottingyaml):
         ax.grid()
         try:
             ax = axs[1]
+            ds['oxygen_concentration'][ ds['oxygen_concentration']==9999]=np.nan
 
             ax.plot(ds['oxygen_concentration'], ds['temperature'],
                     '.', markersize=1)
