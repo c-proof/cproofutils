@@ -62,8 +62,9 @@ def plotCalvertMissionMap(figdir='./figs/', linename='calvert',
     fns.sort()
     print(fns)
     glider = parse_logfiles(fns)
+    glider = glider.where()
     glider = glider.dropna(dim='surfacing')
-    glider = glider.sel(time>start)
+    glider = glider.sel(surfacing=(glider.time>start))
     # get a distance along line.  Simple interp in lon which is prob OK here
     glider['Calvertdist'] = ('surfacing', np.interp(glider['lon'],
                             Calvert['wps'][::-1, -1], Calvert['dist'][::-1]))
