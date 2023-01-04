@@ -21,7 +21,7 @@ def get_line_info(linename):
         #MPA4 -12839.6300   5124.5600
         #XSM -12907.5200   5118.8100
         #Shelf -12951.3300   5104.8700
-        #Turn -13025.9000   5052.6900"""
+        #Turn -13303.578   4956.457"""
 
     f = io.StringIO(inst)
     Calvert = {}
@@ -62,15 +62,12 @@ def plotCalvertMissionMap(figdir='./figs/', linename='calvert',
     fns.sort()
     print(fns)
     glider = parse_logfiles(fns)
-    glider = glider.where()
     glider = glider.dropna(dim='surfacing')
     glider = glider.sel(surfacing=(glider.time>start))
     # get a distance along line.  Simple interp in lon which is prob OK here
     glider['Calvertdist'] = ('surfacing', np.interp(glider['lon'],
                             Calvert['wps'][::-1, -1], Calvert['dist'][::-1]))
 
-    print(glider.time[0].values)
-    print(glider.time[-1].values)
     # make a 6-h interp of this...
     dt = np.timedelta64(6*3600, 's')
     time = np.arange(glider.time[-1].values, glider.time[0].values, -dt)[::-1]
