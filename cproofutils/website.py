@@ -234,7 +234,7 @@ def geojson_deployments(dir, outfile='cproof-deployments.geojson'):
 
                             # get URL....
                             feat.properties['url'] = ('' +
-                                'http://cproof.uvic.ca/gliderdata/deployments/' +
+                                'https://cproof.uvic.ca/gliderdata/deployments/' +
                                 d2[2:])
                             # get color:
                             cols = np.random.randint(0, 200, 3)
@@ -250,7 +250,7 @@ def geojson_deployments(dir, outfile='cproof-deployments.geojson'):
 
                             # make the kml:
                             pnt = kml.newpoint(coords=[line[-1]])
-                            pnt.style.iconstyle.icon.href = 'http://cproof.uvic.ca/deployments/assets/images/slocum_glider.png'
+                            pnt.style.iconstyle.icon.href = 'https://cproof.uvic.ca/deployments/assets/images/slocum_glider.png'
                             coords = []
                             for thelon, thelat  in zip(ds.longitude.values, ds.latitude.values):
                                 coords += [(thelon, thelat)]
