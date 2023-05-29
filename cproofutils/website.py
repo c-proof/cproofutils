@@ -100,11 +100,11 @@ def ticker(dir):
                 totalkm = ds.variables['distance_over_ground'].data[-1]
                 # sometimes the distance over ground resets, so we need to find all
                 # the indices where it goes back to zero, and add the DOG before:
-                list_ = np.where(ds.variables['distance_over_ground'].data==0)[0]         # Locate where in distance over ground there is a 0,
+                list_ = np.where(ds.variables['distance_over_ground'].data==0)[0]
 
                 for i in list_:
                     if i>0:
-                        totalkm += ds.variables['distance_over_ground'].data[i-1]              # add number before every 0 appearance to final sum
+                        totalkm += ds.variables['distance_over_ground'].data[i-1]
                 _log.info(f'Total km: {totalkm}')
                 sump += totalkm
                 try:
