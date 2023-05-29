@@ -81,31 +81,44 @@ def ticker(dir):
 # directory, and then added using jekyll {% include %}
 
     sump = 0                   # set variable to 0
-    subdirs = glob.glob(dir + '/dfo-*')
-   # atts = []
-    for d in subdirs:
-        if os.path.isdir(d):   #define subdirs so that only go into directories that start with 'dfo-*'
-            if 1:
-                _log.info(d)
-                nc = sorted(glob.glob(d+'/L0-timeseries/*.nc'), key=os.path.getmtime)
+    nprofiles = 0
+    gliders = [d for d in glob.glob(dir + '/dfo-*') if os.path.isdir(d)]
+    for glider in gliders:
+        dirs = [d for d in glob.glob(glider + '/dfo-*') if os.path.isdir(d)]
+        for d in dirs:
+            _log.info(d)
+            nc = sorted(glob.glob(d+'/L0-timeseries/*.nc'), key=os.path.getmtime)
+            if len(nc) < 1:
+                nc = sorted(glob.glob(d+'/L1-timeseries/*.nc'), key=os.path.getmtime)
                 if len(nc) < 1:
-                    nc = sorted(glob.glob(d+'/L1-timeseries/*.nc'), key=os.path.getmtime)
-                    if len(nc) < 1:
-                        continue
-                with xr.open_dataset(nc[-1]) as ds:  #open most recent of sorted netcdf files (last, [-1])
-                    sump += ds.variables['distance_over_ground'].data[-1]                   # Add last element of dataset to final sum                    
-                    list_ = np.where(ds.variables['distance_over_ground'].data==0)          # Locate where in distance over ground there is a 0,                    
-                    flattened = [val for sublist in list_ for val in sublist]               # List comprhension to allow traversal through list
+                    _log.info('No data!')
+                    continue
+            with xr.open_dataset(nc[-1]) as ds:
+                totalkm = 0
+                #open most recent of sorted netcdf files (last, [-1])
+                # Add last element of dataset to final sum
+                totalkm = ds.variables['distance_over_ground'].data[-1]
+                # sometimes the distance over ground resets, so we need to find all
+                # the indices where it goes back to zero, and add the DOG before:
+                list_ = np.where(ds.variables['distance_over_ground'].data==0)[0]         # Locate where in distance over ground there is a 0,
 
-                    for i in flattened:
-                        if i>0:    
-                            sump += ds.variables['distance_over_ground'].data[i-1]              # add number before every 0 appearance to final sum
+                for i in list_:
+                    if i>0:
+                        totalkm += ds.variables['distance_over_ground'].data[i-1]              # add number before every 0 appearance to final sum
+                _log.info(f'Total km: {totalkm}')
+                sump += totalkm
+                try:
+                    newprofiles = len(np.unique(ds.profile_index))
+                except:
+                    pass
+                _log.info(f'Total profiles: {newprofiles}')
+                nprofiles += newprofiles
 
-   # print('final sum', "{:.f}".format(sump)) #final sum print check
-   # print('final sum', int(sump)) #final sum print check
-
-    with open('/Users/cproof/cproofwebsite/_includes/inputfile.html', 'w') as output_file:  #output to html file in website directory
+    with open('/Users/cproof/cproofwebsite/_includes/totalkm.html', 'w') as output_file:  #output to html file in website directory
         output_file.write(str(int(sump)))
+
+    with open('/Users/cproof/cproofwebsite/_includes/totalprofiles.html', 'w') as output_file:  #output to html file in website directory
+        output_file.write(str(int(nprofiles)))
 
 #######
 
