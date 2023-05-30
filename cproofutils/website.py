@@ -121,7 +121,7 @@ To date, our gliders have traveled {int(sump):,} km and
 made {int(nprofiles):,} CTD, O2, and optics casts.
 </p>
 """
-        print(outstr)
+        _log.info(outstr)
         output_file.write(outstr)
 
 #######
