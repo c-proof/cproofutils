@@ -82,6 +82,9 @@ def ticker(dir):
 
     sump = 0                   # set variable to 0
     nprofiles = 0
+    totaltime = 0
+    t0 = np.datetime64('2200-01-01')
+    tf = np.datetime64('1900-01-01')
     gliders = [d for d in glob.glob(dir + '/dfo-*') if os.path.isdir(d)]
     for glider in gliders:
         dirs = [d for d in glob.glob(glider + '/dfo-*') if os.path.isdir(d)]
@@ -94,6 +97,14 @@ def ticker(dir):
                     _log.info('No data!')
                     continue
             with xr.open_dataset(nc[-1]) as ds:
+                if ds.time[0] < t0:
+                    t0 = ds.time[0]
+                if ds.time[-1] > tf:
+                    tf = ds.time[-1]
+
+                dttime = np.float(ds.time[-1] - ds.time[0]) / 1e9 / 24 / 3600
+                _log.info('Time %f', dttime)
+                totaltime += dttime
                 totalkm = 0
                 #open most recent of sorted netcdf files (last, [-1])
                 # Add last element of dataset to final sum
@@ -117,8 +128,8 @@ def ticker(dir):
     with open('/Users/cproof/processing/deployments/Totals.html', 'w') as output_file:
         outstr = f"""
 <p style="color:white;font-size:14pt;background-color:#888888">
-To date, our gliders have traveled {int(sump):,} km and
-made {int(nprofiles):,} CTD, O2, and optics casts.
+Between {str(t0.values)[:10]} and {str(tf.values)[:10]}, our gliders have traveled {int(sump):,} km and
+made {int(nprofiles):,} CTD, O2, and optics casts, over {int(totaltime):,} days at sea.
 </p>
 """
         _log.info(outstr)
