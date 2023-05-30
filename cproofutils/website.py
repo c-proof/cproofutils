@@ -114,11 +114,15 @@ def ticker(dir):
                 _log.info(f'Total profiles: {newprofiles}')
                 nprofiles += newprofiles
 
-    with open('/Users/cproof/cproofwebsite/_includes/totalkm.html', 'w') as output_file:  #output to html file in website directory
-        output_file.write(str(int(sump)))
-
-    with open('/Users/cproof/cproofwebsite/_includes/totalprofiles.html', 'w') as output_file:  #output to html file in website directory
-        output_file.write(str(int(nprofiles)))
+    with open('/Users/cproof/processing/deployments/Totals.html', 'w') as output_file:
+        outstr = f"""
+<p style="color:white;font-size:14pt;background-color:#888888">
+To date, our gliders have traveled {int(sump):,} km and
+made {int(nprofiles):,} CTD, O2, and optics casts.
+</p>
+"""
+        _log.info(outstr)
+        output_file.write(outstr)
 
 #######
 
