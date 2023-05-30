@@ -114,13 +114,6 @@ def ticker(dir):
                 _log.info(f'Total profiles: {newprofiles}')
                 nprofiles += newprofiles
 
-    if False:
-        with open('/Users/cproof/cproofwebsite/_includes/totalkm.html', 'w') as output_file:  #output to html file in website directory
-            output_file.write(str(int(sump)))
-
-        with open('/Users/cproof/cproofwebsite/_includes/totalprofiles.html', 'w') as output_file:  #output to html file in website directory
-            output_file.write(str(int(nprofiles)))
-
     with open('/Users/cproof/processing/deployments/Totals.html', 'w') as output_file:
         outstr = f"""
 <p style="color:white;font-size:14pt;background-color:#888888">
