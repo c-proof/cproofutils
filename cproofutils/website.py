@@ -85,6 +85,9 @@ def ticker(dir):
     totaltime = 0
     t0 = np.datetime64('2200-01-01')
     tf = np.datetime64('1900-01-01')
+    totaltime = 0
+    t0 = np.datetime64('2200-01-01')
+    tf = np.datetime64('1900-01-01')
     gliders = [d for d in glob.glob(dir + '/dfo-*') if os.path.isdir(d)]
     for glider in gliders:
         dirs = [d for d in glob.glob(glider + '/dfo-*') if os.path.isdir(d)]
@@ -97,12 +100,12 @@ def ticker(dir):
                     _log.info('No data!')
                     continue
             with xr.open_dataset(nc[-1]) as ds:
-                if ds.time[0] < t0:
-                    t0 = ds.time[0]
-                if ds.time[-1] > tf:
-                    tf = ds.time[-1]
+                if ds.time[0].values < t0:
+                    t0 = ds.time[0].values
+                if ds.time[-1].values > tf:
+                    tf = ds.time[-1].values
 
-                dttime = np.float(ds.time[-1] - ds.time[0]) / 1e9 / 24 / 3600
+                dttime = (ds.time[-1] - ds.time[0]) / 1e9 / 24 / 3600
                 _log.info('Time %f', dttime)
                 totaltime += dttime
                 totalkm = 0
@@ -138,7 +141,8 @@ made {int(nprofiles):,} CTD, O2, and optics casts, over {int(totaltime):,} days 
 #######
 
 
-def index_deployments(dir, templatedir='./.templates/'):
+def index_deployments(dir, templatedir='./.templates/',
+                      listdict={'mission_all.txt':None}):
     """
     Get useful info from deployments under "dir" and add to an
     index.html in "dir"
@@ -191,6 +195,7 @@ def index_deployments(dir, templatedir='./.templates/'):
                 figs = glob.glob(d + '/figs/*.png')
                 for n, fig in enumerate(figs):
                     figs[n] = './figs/' + os.path.split(fig)[1]
+                    _log.info(figs[n])
                 nc = glob.glob(d+'/L0-timeseries/*.nc')
                 template = templateNew
 
@@ -242,55 +247,63 @@ def geojson_deployments(dir, outfile='cproof-deployments.geojson'):
                 kml = simplekml.Kml()  #note: put kml in for loop
                 if os.path.isdir(d2):
                     try:
-                        nc = glob.glob(d2+'/L0-gridfiles/*.nc')
+                        nc = glob.glob(d2+'/L0-gridfiles/*grid.nc')
                         if len(nc) < 1:
                             # old style
-                            nc = glob.glob(d2+'/L2-gridfiles/*.nc')
-
+                            nc = glob.glob(d2+'/L2-gridfiles/*grid.nc')
+                            if len(nc) < 1:
+                                _log.info(f'Could not find grid file {d2}')
+                                continue
                         with xr.open_dataset(nc[0]) as ds:
+                            ds = ds.where(
+                                    (ds.longitude>-150) & (ds.longitude< -120)
+                                     & (ds.latitude>35) & (ds.latitude<60),
+                                     drop=True)
                             _log.info(f'opened {nc[0]}')
                             att = ds.attrs
-                            good = (ds.longitude < -120)
-                            line = np.vstack((ds.longitude[good], ds.latitude[good])).T
-                            ls = geojson.LineString(line.tolist())
-                            feat = geojson.Feature(geometry=ls)
-                            for prop in props:
-                                if prop in ds.attrs.keys():
-                                    feat.properties[prop] = ds.attrs[prop]
+                            if ds.longitude.shape[0] > 2:
+                                line = np.vstack((ds.longitude, ds.latitude)).T
+                                ls = geojson.LineString(line.tolist())
+                                feat = geojson.Feature(geometry=ls)
+                                for prop in props:
+                                    if prop in ds.attrs.keys():
+                                        feat.properties[prop] = ds.attrs[prop]
+                                    else:
+                                        feat.properties[prop] = ''
+
+                                # get URL....
+                                feat.properties['url'] = ('' +
+                                    'https://cproof.uvic.ca/gliderdata/deployments/' +
+                                    d2[2:])
+                                # get color:
+                                cols = np.random.randint(0, 200, 3)
+                                # cols = pygu.get_html_non_blue(colornum)
+                                colornum += 1
+                                feat.properties['color'] = '#%02X%02X%02X' % (cols[0], cols[1], cols[2])
+                                if ds['time'][-1] > np.datetime64(datetime.datetime.now()) - np.timedelta64(2, 'D'):
+                                    feat.properties['active'] = True
                                 else:
-                                    feat.properties[prop] = ''
+                                    feat.properties['active'] = False
 
-                            # get URL....
-                            feat.properties['url'] = ('' +
-                                'https://cproof.uvic.ca/gliderdata/deployments/' +
-                                d2[2:])
-                            # get color:
-                            cols = np.random.randint(0, 200, 3)
-                            # cols = pygu.get_html_non_blue(colornum)
-                            colornum += 1
-                            feat.properties['color'] = '#%02X%02X%02X' % (cols[0], cols[1], cols[2])
-                            if ds['time'][-1] > np.datetime64(datetime.datetime.now()) - np.timedelta64(2, 'D'):
-                                feat.properties['active'] = True
+                                features += [feat]
+
+                                # make the kml:
+                                pnt = kml.newpoint(coords=[line[-1]])
+                                pnt.style.iconstyle.icon.href = 'https://cproof.uvic.ca/deployments/assets/images/slocum_glider.png'
+                                coords = []
+                                for thelon, thelat  in zip(ds.longitude.values, ds.latitude.values):
+                                    coords += [(thelon, thelat)]
+                                pnt.timestamp.when = f'{ds.time.values[-1]}'[:-3]
+                                ls = kml.newlinestring(coords=coords,
+                                    name=att['deployment_name'],
+                                    )
+                                ls.timespan.begin = f'{ds.time.values[0]}'[:-3]
+                                ls.timespan.end = f'{ds.time.values[-1]}'[:-3]
+                                ls.style.linestyle.color = 'ee' + '%02X%02X%02X' %  (cols[2], cols[1], cols[0])
+                                ls.style.linestyle.width = 3;
+                                kml.save(d2[2:]+'/'+att['deployment_name']+'.kml')
                             else:
-                                feat.properties['active'] = False
-
-                            features += [feat]
-
-                            # make the kml:
-                            pnt = kml.newpoint(coords=[line[-1]])
-                            pnt.style.iconstyle.icon.href = 'https://cproof.uvic.ca/deployments/assets/images/slocum_glider.png'
-                            coords = []
-                            for thelon, thelat  in zip(ds.longitude.values, ds.latitude.values):
-                                coords += [(thelon, thelat)]
-                            pnt.timestamp.when = f'{ds.time.values[-1]}'[:-3]
-                            ls = kml.newlinestring(coords=coords,
-                                name=att['deployment_name'],
-                                )
-                            ls.timespan.begin = f'{ds.time.values[0]}'[:-3]
-                            ls.timespan.end = f'{ds.time.values[-1]}'[:-3]
-                            ls.style.linestyle.color = 'ee' + '%02X%02X%02X' %  (cols[2], cols[1], cols[0])
-                            ls.style.linestyle.width = 3;
-                            kml.save(d2[2:]+'/'+att['deployment_name']+'.kml')
+                                _log.info(f'No good data {d2}')
 
                     except:
                         _log.info(f'Could not find grid file {d2}')
@@ -306,9 +319,11 @@ def geojson_deployments(dir, outfile='cproof-deployments.geojson'):
    # Adding additional ARGO float numbers
 
     df = pd.DataFrame()
-
+    _log.info('FLoats')
     coords = []
     for f in argo.float(my_wmos):
+        _log.info(f)
+
         for row in f.prof:
            # if f.prof.latitude > 0:  #make not nan
             lat = f.prof.latitude
@@ -339,3 +354,47 @@ def geojson_deployments(dir, outfile='cproof-deployments.geojson'):
     with open('cproof-deployments_all.geojson', 'w') as fout:
         s = geojson.dumps(feature_collection)
         fout.write(s)
+
+
+def make_wget_txt(dir, outfile='mission_all.txt', comment_str=None,
+                  prefix='https://cproof.uvic.ca/gliderdata/deployments/'):
+
+    outf = open(outfile, 'w')
+    subdirs = glob.glob(dir + '/*')
+
+    for d in subdirs:
+        _log.info(d)
+        if not os.path.isdir(d):
+            continue
+        subdirs2 = glob.glob(d + '/*')
+        for d2 in subdirs2:
+            _log.info(d2)
+            if not os.path.isdir(d2):
+                continue
+            ncr = None
+            nc = glob.glob(d2+'/L0-gridfiles/*grid_delayed.nc')
+            if len(nc) == 1:
+                ncr = nc[0]
+            else:
+                nc = glob.glob(d2+'/L0-gridfiles/*grid.nc')
+                if len(nc) == 1:
+                    ncr = nc[0]
+            if ncr:
+                if comment_str:
+                    with xr.open_dataset(ncr) as ds:
+                        print(ds.attrs['comment'])
+                        if (comment_str in ds.attrs['comment']):
+                            outf.write(prefix+ncr)
+                            outf.write('\n')
+                            _log.info(f'"{comment_str}" in {ncr}')
+                        else:
+                            _log.info(f'"{comment_str}" not in {ncr}')
+                else:
+                    outf.write(prefix+ncr)
+                    outf.write('\n')
+
+            else:
+                _log.info(f'Nothing at {d2}')
+
+    outf.close()
+
