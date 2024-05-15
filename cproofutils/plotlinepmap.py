@@ -6,7 +6,9 @@ import datetime
 import glob
 import io
 import numpy as np
+import re
 import seawater
+import warnings
 import xarray as xr
 
 import matplotlib
@@ -45,23 +47,30 @@ def get_line_info(linename):
         inst = """#Tofino -12602.988  4856.826
         #LC00 -12640.0000 4815.01
         #LC01 -12735.9200 4750.9500"""
-
+    elif linename == 'South':
+        inst = """#Tofino -12602.988  4856.826
+        #P4 -12640.0000  4839.0000
+        #South -13333.0000  4600.01"""
 
     f = io.StringIO(inst)
     lineP = {}
     lineP['wps'] = None
     lineP['nm']  = []
     for line in f:
-        st = line.strip().split(' ')
+        st = re.split('\s+', line.strip())
         print(st)
-        lon = pgutils.nmea2deg(float(st[1]))
-        lat = pgutils.nmea2deg(float(st[-1]))
-        if lineP['wps'] is None:
-            lineP['wps'] = np.array([[lat, lon]])
+        if len(st) == 3:
+            lon = pgutils.nmea2deg(float(st[1]))
+            lat = pgutils.nmea2deg(float(st[-1]))
+            if lineP['wps'] is None:
+                lineP['wps'] = np.array([[lat, lon]])
+            else:
+                lineP['wps'] = np.append(lineP['wps'], np.array([[lat, lon]]), axis=0)
+            lineP['nm'] += [st[0][1:]]
         else:
-            lineP['wps'] = np.append(lineP['wps'], np.array([[lat, lon]]), axis=0)
-        lineP['nm'] += [st[0][1:]]
+            warnings.warn('Bad waypoint list line')
 
+    print(lineP)
     # get distances
     dist = np.zeros(len(lineP['wps']))
     dist, ang  = seawater.extras.dist(lineP['wps'][:, 0], lineP['wps'][:, 1])
@@ -74,7 +83,9 @@ def get_line_info(linename):
 def plotLinePMissionMap(figdir='./figs/', linename='linep',
                         outname='LinePMissionMap.png', dpi=200, logdir='./logs',
                         lonlim=[-145.2, -124.4], latlim=[46.1, 52.2],
-                        topofile = '~cproof/Sites/gliderdata/smith_sandwell_topo_v8_2.nc'):
+                        topofile = '~cproof/Sites/gliderdata/smith_sandwell_topo_v8_2.nc',
+                        totalAmpH=215,
+                        starttime='2010-01-01'):
 
     utcnow = datetime.datetime.utcnow()
 
@@ -86,6 +97,7 @@ def plotLinePMissionMap(figdir='./figs/', linename='linep',
     print(fns)
     glider = parse_logfiles(fns)
     glider = glider.dropna(dim='surfacing')
+    glider = glider.where(glider.time > np.datetime64(starttime), drop=True)
     # get a distance along line.  Simple interp in lon which is prob OK here
     glider['LinePdist'] = ('surfacing', np.interp(glider['lon'],
                             lineP['wps'][::-1, -1], lineP['dist'][::-1]))
@@ -165,7 +177,7 @@ def plotLinePMissionMap(figdir='./figs/', linename='linep',
     axs[1].set_ylabel('AmpH/d')
     axs[1].set_ylim(bottom=0, top=10)
     text =  f'Latest [30 h]:  {latestAmpHperday:4.1f} AmpH/d\n'
-    text += f'Used [500 Amph] {glider6h.ampH.values[-1]:4.1f} Amph\n'
+    text += f'Used [{totalAmpH} Amph] {glider6h.ampH.values[-1]:4.1f} Amph\n'
     text += f'Percent used:   {glider6h.ampH.values[-1] / 5:4.1f}%'
     axs[1].text(0.05, 0.1, text, family='monospace', fontsize='medium',
                         transform=axs[1].transAxes)

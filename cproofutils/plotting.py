@@ -10,6 +10,8 @@ import matplotlib.units as munits
 import gsw
 from datetime import datetime
 
+import cmocean
+
 _log = logging.getLogger(__name__)
 
 try:
@@ -40,10 +42,10 @@ def timeseries_plots(fname, plottingyaml):
     with open(plottingyaml) as fin:
         config = yaml.safe_load(fin)
         if 'starttime' in config.keys():
-            starttime = np.datetime64(config['starttime'])
+            starttime = np.datetime64(config['starttime'], 'ns')
         else:
             starttime = None
-        _log.info(f'starttime: {starttime}')
+        _log.info(f'starttime: {starttime} {starttime.dtype}')
 
     try:
         os.mkdir(config['figdir'])
@@ -51,8 +53,8 @@ def timeseries_plots(fname, plottingyaml):
         pass
 
     with xr.open_dataset(fname, decode_times=True) as ds0:
+        ds = ds0.where(ds0.time>starttime, drop=True).dropna(dim='time')
 
-        ds = ds0.sel(time=slice(starttime, None))
         # map!
         fig1, axs1 = plt.subplots(figsize=(7.5, 7.5))
         ax = axs1
@@ -298,7 +300,7 @@ def grid_plots(fname, plottingyaml):
     with open(plottingyaml) as fin:
         config = yaml.safe_load(fin)
         if 'starttime' in config.keys():
-            starttime = np.datetime64(config['starttime'])
+            starttime = np.datetime64(config['starttime'], 'ns')
         else:
             starttime = None
 
@@ -307,8 +309,9 @@ def grid_plots(fname, plottingyaml):
     except:
         pass
 
-    with xr.open_dataset(fname, decode_times=True) as ds0:
-        ds = ds0.sel(time=slice(starttime, None))
+    with xr.open_dataset(fname, decode_times=True) as ds:
+        # ds = ds0.sel(time=slice(starttime, None))
+        ds = ds.where(ds.time>starttime, drop=True)
         _log.debug(str(ds))
 
         keys = config['pcolor']['vars'].keys()
@@ -337,11 +340,12 @@ def grid_plots(fname, plottingyaml):
             if vmax is not None:
                 max = vmax
             # get good profiles.  i.e. those w data
-            ind = np.where(np.sum(np.isfinite(ds[k].values), axis=0)>10)[0]
+            ind = np.where(np.sum(np.isfinite(ds[k].values), axis=0)>2)[0]
             _log.debug(ind)
             _log.debug(len(ds.time))
-            if len(ind) > 1:
+            if len(ind) > 2:
                 time = ds.time[ind[1:]] + np.diff(ds.time[ind]) / 2
+                print('TIME', time)
                 time = np.hstack((time[0] - (time[1]-time[0]) / 2, time))
                 depth = ds.depth[:-1] - np.diff(ds.depth)
                 depth = np.hstack((depth, depth[-1] + np.diff(ds.depth)[-1]))
@@ -374,3 +378,82 @@ def grid_plots(fname, plottingyaml):
         for ax in axs:
             ax.set_xlim([t0, t1])
         fig.savefig(config['figdir'] + '/pcolor_%s_last10d.png'%ds.attrs['deployment_name'], dpi=200)
+
+def anomaly_plots(fname, plottingyaml):
+    """
+    Temperature anomalies from LineP means and standard deviations.
+    """
+    _log.info('Anomaly plots!')
+    with open(plottingyaml) as fin:
+        config = yaml.safe_load(fin)
+        if 'starttime' in config.keys():
+            starttime = np.datetime64(config['starttime'], 'ns')
+        else:
+            starttime = None
+
+    try:
+        os.mkdir(config['figdir'])
+    except:
+        pass
+
+    fig, ax = plt.subplots(layout='constrained', figsize=(4.5, 2.7))
+    cmap = plt.cm.RdBu_r
+
+    with (xr.open_dataset(fname, decode_times=True) as ds,
+          xr.open_dataset('../../../meanProfilesLineP.nc', decode_times=True) as dsmean):
+        ds = ds.where(ds.time>starttime, drop=True)
+
+        ind = np.where(np.sum(np.isfinite(ds['temperature'].values), axis=0)>3)[0]
+        ds = ds.isel(time=ind)
+        tmean = ds.temperature.mean(dim='time', skipna=True)
+        indmax = np.where(~np.isnan(tmean))[0][-1]
+        depmax = ds.depth[indmax]
+
+        ds['Tmean'] = ds.temperature * 0
+        ds['Tstd'] = ds.temperature * 0
+        for j in range(len(ds.time)):
+            ds['Tmean'][:, j] = np.interp(ds.potential_density[:, j],
+                                          dsmean.potential_density, dsmean.temperature)
+            ds['Tstd'][:, j] = np.interp(ds.potential_density[:, j],
+                                         dsmean.potential_density, dsmean.temperature_std)
+
+        pc = ax.pcolormesh(ds.time, ds.depth, (ds.temperature - ds.Tmean)/ds.Tstd,
+                           rasterized=True, vmin=-3, vmax=3, cmap=cmap, shading='nearest')
+        ax.contour(ds.time, ds.depth, ds.potential_density, colors='0.5',
+                   levels=np.arange(22, 28, 0.5)+1000, linewidths=0.5, alpha=0.7)
+
+        fig.colorbar(pc, ax=ax, extend='both', shrink=0.6, pad=0.01, label='normalized temperature anom.')
+        ax.set_title(ds.attrs['deployment_name'], loc='left', fontsize=9, fontstyle='italic')
+        t0 = ds.time[0]
+        t1 = ds.time[-1]
+        ax.set_xlim([t0, t1])
+        ax.set_ylim([depmax, 0])
+        ax.set_facecolor('0.6')
+        ax.set_ylabel('DEPTH [m]')
+        fig.savefig(config['figdir'] + '/pcolor_%s_tempanom.png'%ds.attrs['deployment_name'], dpi=200)
+
+
+def ts_dens_plots(fname, plottingyaml):
+    """
+    Temperature anomalies from LineP means and standard deviations.
+    """
+    _log.info('Anomaly plots!')
+    with open(plottingyaml) as fin:
+        config = yaml.safe_load(fin)
+        if 'starttime' in config.keys():
+            starttime = np.datetime64(config['starttime'])
+        else:
+            starttime = None
+
+    try:
+        os.mkdir(config['figdir'])
+    except:
+        pass
+
+    fig, ax = plt.subplots(layout='constrained', figsize=(4.0, 4.0))
+    cmap = plt.cm.RdBu_r
+
+    with (xr.open_dataset(fname, decode_times=True) as ds0,
+          xr.open_dataset('../../../meanProfilesLineP.nc', decode_times=True) as dsmean):
+        pass
+
