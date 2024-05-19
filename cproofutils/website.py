@@ -244,13 +244,15 @@ def geojson_deployments(dir, outfile='cproof-deployments.geojson'):
                 kml = simplekml.Kml()  #note: put kml in for loop
                 if os.path.isdir(d2):
                     try:
-                        nc = glob.glob(d2+'/L0-gridfiles/*grid.nc')
+                        nc = glob.glob(d2+'/L0-gridfiles/*grid_delayed.nc')
+                        if len(nc) <1:
+                            nc = glob.glob(d2+'/L0-gridfiles/*grid.nc')
                         if len(nc) < 1:
                             # old style
                             nc = glob.glob(d2+'/L2-gridfiles/*grid.nc')
-                            if len(nc) < 1:
-                                _log.info(f'Could not find grid file {d2}')
-                                continue
+                        if len(nc) < 1:
+                            _log.info(f'Could not find grid file {d2}')
+                            continue
                         with xr.open_dataset(nc[0]) as ds:
                             ds = ds.where(
                                     (ds.longitude>-150) & (ds.longitude< -120)
@@ -338,11 +340,7 @@ def geojson_deployments(dir, outfile='cproof-deployments.geojson'):
             colornum += 1
             feat.properties['color'] = '#%02X%02X%02X' % (cols[0], cols[1], cols[2])
             feat.properties['name'] = 'argo'
-            if ds['time'][-1] > np.datetime64(datetime.datetime.now()) - np.timedelta64(7, 'D'):
-                feat.properties['active'] = True
-            else:
-                feat.properties['active'] = False  #?? current status ??
-
+            feat.properties['active'] = True
         features += [feat]
 ####
 
