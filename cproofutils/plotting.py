@@ -9,6 +9,7 @@ import matplotlib.dates as mdates
 import matplotlib.units as munits
 import gsw
 from datetime import datetime
+import glob
 
 import cmocean
 
@@ -379,6 +380,7 @@ def grid_plots(fname, plottingyaml):
             ax.set_xlim([t0, t1])
         fig.savefig(config['figdir'] + '/pcolor_%s_last10d.png'%ds.attrs['deployment_name'], dpi=200)
 
+
 def anomaly_plots(fname, plottingyaml):
     """
     Temperature anomalies from LineP means and standard deviations.
@@ -431,6 +433,161 @@ def anomaly_plots(fname, plottingyaml):
         ax.set_facecolor('0.6')
         ax.set_ylabel('DEPTH [m]')
         fig.savefig(config['figdir'] + '/pcolor_%s_tempanom.png'%ds.attrs['deployment_name'], dpi=200)
+
+
+def overview_plot(fname, plottingyaml, location='LineP',
+                  to_try=None,
+                  topofile='~cproof/Sites/gliderdata/smith_sandwell_topo_v8_2.nc'):
+    """
+    Make a plot w/ Temp, O2, and Chl, and a map in fourth place.
+
+    Map location is set by "location" variable.
+    """
+    lonlim=[-145.2, -124.4]
+    latlim=[46.1, 52.2]
+    _log.info('Overview plots!')
+    with open(plottingyaml) as fin:
+        config = yaml.safe_load(fin)
+        if 'starttime' in config.keys():
+            starttime = np.datetime64(config['starttime'], 'ns')
+        else:
+            starttime = None
+
+    try:
+        os.mkdir(config['figdir'])
+    except:
+        pass
+
+    with xr.open_dataset(fname, decode_times=True) as ds:
+        # ds = ds0.sel(time=slice(starttime, None))
+        ds = ds.where(ds.time>starttime, drop=True)
+        _log.debug(str(ds))
+
+        keys = config['pcolor']['vars'].keys()
+        # choose the first three of these
+        if to_try is None:
+            to_try = ['temperature','oxygen_concentration', 'chlorophyll', 'backscatter_700', 'cdom', 'salinity']
+        new_keys = []
+        for key in to_try:
+            if key in keys:
+                new_keys += [key]
+        keys = new_keys[:3]
+        # get the max depth that data is at:
+        tmean = ds.temperature.mean(axis=1)
+        indmax = np.where(~np.isnan(tmean))[0][-1]
+        depmax = ds.depth[indmax]
+        fig, axs = plt.subplots(2, 2, figsize=(5*8/4, 5),
+                                constrained_layout=True)
+        axs = axs.flat
+        for n, k in enumerate(keys):
+            _log.debug(f'key {k}')
+            pconf = config['pcolor']['vars'][k]
+            _log.debug(pconf)
+
+            cmap = pconf.get('cmap','viridis')
+            vmin = pconf.get('vmin', None)
+            vmax = pconf.get('vmax', None)
+
+            ax = axs[n]
+
+            min, max = _autoclim(ds[k])
+            if vmin is not None:
+                min = vmin
+            if vmax is not None:
+                max = vmax
+            # get good profiles.  i.e. those w data
+            ind = np.where(np.sum(np.isfinite(ds[k].values), axis=0)>2)[0]
+            _log.debug(ind)
+            _log.debug(len(ds.time))
+            if len(ind) > 2:
+                time = ds.time[ind[1:]] + np.diff(ds.time[ind]) / 2
+                print('TIME', time)
+                time = np.hstack((time[0] - (time[1]-time[0]) / 2, time))
+                depth = ds.depth[:-1] - np.diff(ds.depth)
+                depth = np.hstack((depth, depth[-1] + np.diff(ds.depth)[-1]))
+                pc = ax.pcolormesh(time, depth, ds[k][:, ind],
+                    rasterized=True, vmin=min, vmax=max, cmap=cmap, shading='auto')
+                ax.contour(ds.time[ind], ds.depth, ds.potential_density[:, ind], colors='0.5',
+                       levels=np.arange(22, 28, 0.5)+1000, linewidths=0.5, alpha=0.7)
+                fig.colorbar(pc, ax=ax, extend='both', shrink=0.6)
+            ax.set_title(ds[k].attrs['long_name'] + ' [' +
+                         ds[k].attrs['units'] + ']', loc='left', fontsize=9)
+            t0 = ds.time[0]
+            t1 = ds.time[-1]
+            ax.set_xlim([t0, t1])
+            ax.set_ylim([depmax, 0])
+            if n == 0:
+                ax.set_ylabel('DEPTH [m]')
+            ax.label_outer()
+            ax.set_facecolor('0.8')
+
+
+        # map:
+        figmap = fig.add_subfigure(axs[-1].get_subplotspec())
+        axs[-1].set_visible(False)
+        latlims = [46.25, 53.6]
+        lonlims = [145.1, 123]
+        import matplotlib.colors as mcolors
+        bounds = [-6500, -6000, -5000, -4500,-4000, -3500, -3000, -2500, -2000, -1500, -1000, -750, -500, -350, -200, -150,  -100, -75, -50, -25, 0]
+        ax = figmap.add_subplot([0, 0, 1, 1])
+        norm = mcolors.BoundaryNorm(bounds, 256)
+        with xr.open_dataset(topofile) as topo:
+            # longitude, latitiude, ROSE
+            topo['longitude'] = -(topo.longitude - 360)
+            topo = topo.sel(latitude=slice(latlims[0], latlims[1]), longitude=slice(*lonlims))
+
+            ax.contourf(topo.longitude, topo.latitude, topo.ROSE, linewidths=1, cmap='Greens_r',
+                    levels=np.arange(0, 20_000, 500), vmax=2000, vmin=-200, alpha=0.7, zorder=-10)
+
+            ax.pcolormesh(topo.longitude, topo.latitude, topo.ROSE, linewidths=0, cmap='Blues_r', zorder=-100,
+                        rasterized=True, norm=norm, alpha=0.7)
+
+        ax.set_xlim(lonlims)
+        ax.set_ylim(latlims)
+
+        ax.plot(-ds.longitude, ds.latitude, '.', markersize=1, color='C1', zorder=100)
+        ax.plot(-ds.longitude[-1], ds.latitude[-1], 'go', zorder=100)
+        wp = {}
+        wp['P26'] = [145, 50]
+        wp['P16'] = [134+4/6, 49+17/60]
+        wp['P4'] =  [126+40/60, 48+39/60]
+        for w in wp:
+            ax.plot(wp[w][0], wp[w][1], 'md', zorder=2, markersize=4)
+            ax.text(wp[w][0], wp[w][1], '  ' + w, color='m', zorder=1, fontsize='xx-small', fontstyle='italic', rotation=45)
+        #cb.ax.tick_params(labelsize='small')
+
+        ax.set_xlabel('Longitude $\mathrm{[^o W]}$')
+        ax.set_ylabel('Latitude $\mathrm{[^o N]}$')
+        ax.text(140, 49.14, 'L   i   n   e       P', rotation=-7.0, va='bottom', rotation_mode='anchor', fontstyle='italic',  fontsize='x-small')
+        ax.text(129.45, 46.55, 'Southern Line', rotation=33, va='bottom', rotation_mode='anchor', fontstyle='italic',  fontsize='x-small')
+        ax.text(133, 49.45, 'Calvert Line', rotation=30, va='bottom', rotation_mode='anchor', fontstyle='italic', fontsize='x-small')
+        ax.set_aspect(1/np.cos(49 * np.pi / 180))
+
+        with xr.open_dataset('../../CProofTracks.nc') as dst:
+            dst = dst.where((dst.longitude>-150) & (dst.longitude< -120)
+                            & (dst.latitude>35) & (dst.latitude<60),
+                            drop=True)
+            print(dst)
+            ax.plot(-dst.longitude[::10], dst.latitude[::10], '.', color='0.5', markersize=1, zorder=-90)
+        ax.yaxis.tick_right()
+        ax.yaxis.set_label_position("right")
+        # info at top
+
+        t0 = str(ds.time[0].values)[:16].replace('T', ' ')
+        t1 = str(ds.time[-1].values)[:16].replace('T', ' ')
+        # active?
+        now = np.datetime64(datetime.utcnow())
+        if now - ds.time[-1] < np.timedelta64(3, 'D'):
+            active = "(ongoing)"
+        else:
+            active = ""
+
+        print(ds.attrs)
+        fig.suptitle(f'C-PROOF {ds.attrs["deployment_name"]}   {ds.attrs["project"]}   {t0} to {t1} {active}')
+
+        fig.savefig((config['figdir'] + '/' +
+                     'overview_pcolor_%s.png'%ds.attrs['deployment_name']), dpi=200)
+
 
 
 def ts_dens_plots(fname, plottingyaml):

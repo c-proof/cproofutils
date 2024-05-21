@@ -160,7 +160,6 @@ def index_deployments(dir, templatedir='./.templates/',
     env = Environment(loader=file_loader)
     template = env.get_template('deploymentsIndex.html')
 
-
     subdirs = glob.glob(dir + '/*')
     atts = []
     for d in subdirs:
@@ -197,6 +196,10 @@ def index_deployments(dir, templatedir='./.templates/',
                     figs[n] = './figs/' + os.path.split(fig)[1]
                     _log.info(figs[n])
                 nc = glob.glob(d+'/L0-timeseries/*.nc')
+                ncdelayed = glob.glob(d + '/L0-timeseries/*_delayed.nc')
+                hasdelayed = len(ncdelayed) > 0
+                nccorrected = glob.glob(d + '/L0-timeseries/*_corrected.nc')
+                hascorrected = len(nccorrected) > 0
                 template = templateNew
 
                 if len(nc) < 1:
@@ -218,9 +221,17 @@ def index_deployments(dir, templatedir='./.templates/',
                             unit = 'no units'
                         keys.append(key + ' [' + unit +']')
                 depname = att['deployment_name']
+                ovp = glob.glob(d+f'/figs/overview_pcolor_{depname}.png')
+                hasoverviewplot = len(ovp) > 0
+                if hasoverviewplot:
+                    hasoverviewplot = f'./figs/overview_pcolor_{depname}.png'
+                else:
+                    hasoverviewplot = ''
                 output = template.render(deploy_name=depname,
                     title=att['glider_name'] + att['glider_serial'],
-                    figs=figs, att=att, keys=keys)
+                    figs=figs, att=att, keys=keys,
+                    hasdelayed=hasdelayed, hascorrected=hascorrected,
+                    hasoverviewplot=hasoverviewplot)
                 with open(d + '/index.html', 'w') as fout:
                     fout.write(output)
             else:
@@ -238,6 +249,7 @@ def geojson_deployments(dir, outfile='cproof-deployments.geojson'):
     np.random.seed(20190101)
     _log.debug(f'subdirs, {subdirs}')
     colornum = 0;
+    filen = 0
     for d in subdirs:
         _log.info(d)
         if os.path.isdir(d):
@@ -256,11 +268,24 @@ def geojson_deployments(dir, outfile='cproof-deployments.geojson'):
                         if len(nc) < 1:
                             _log.info(f'Could not find grid file {d2}')
                             continue
+                        _log.info('Using %s', nc)
                         with xr.open_dataset(nc[0]) as ds:
                             ds = ds.where(
                                     (ds.longitude>-150) & (ds.longitude< -120)
                                      & (ds.latitude>35) & (ds.latitude<60),
                                      drop=True)
+                            ds.attrs['deployment_start'] = str(ds.time[0].values)[:16]
+                            ds.attrs['deployment_end'] = str(ds.time[-1].values)[:16]
+                            # probably should keep track of other stuff, but lets do this for now
+                            dsn = xr.Dataset(coords={'time':ds.time},
+                                             data_vars={'longitude':('time', ds.longitude.values),
+                                                        'latitude':('time', ds.latitude.values)})
+                            # make the navdataset:
+                            if filen == 0:
+                                dsnav = dsn.copy()
+                            else:
+                                dsnav = xr.concat((dsnav, dsn), dim='time')
+                            filen += 1
                             _log.info(f'opened {nc[0]}')
                             att = ds.attrs
                             if ds.longitude.shape[0] > 2:
@@ -300,15 +325,19 @@ def geojson_deployments(dir, outfile='cproof-deployments.geojson'):
                                     name=att['deployment_name'],
                                     )
                                 ls.timespan.begin = f'{ds.time.values[0]}'[:-3]
+                                print('@@@@@@@@BEGIN', ls.timespan.begin)
                                 ls.timespan.end = f'{ds.time.values[-1]}'[:-3]
+                                print(ls.timespan.end)
                                 ls.style.linestyle.color = 'ee' + '%02X%02X%02X' %  (cols[2], cols[1], cols[0])
                                 ls.style.linestyle.width = 3;
                                 kml.save(d2[2:]+'/'+att['deployment_name']+'.kml')
+
                             else:
                                 _log.info(f'No good data {d2}')
 
                     except:
                         _log.info(f'Could not find grid file {d2}')
+    dsnav.to_netcdf('CProofTracks.nc')
     feature_collection = geojson.FeatureCollection(features)
     with open(outfile, 'w') as fout:
         s = geojson.dumps(feature_collection)
