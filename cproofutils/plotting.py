@@ -93,7 +93,7 @@ def timeseries_plots(fname, plottingyaml):
                 a = [0,1,2,3]
                 b = [4,5]
                 _log.debug(f'key {k}')
-                if config['timeseries'][k] == 'True':
+                if (config['timeseries'][k] == 'True') and (k in ds):
                     ax = axs[n]
                     #convert 9999 to nan
                     ds[k] = ds[k].where(ds[k] != 9999, np.nan)
@@ -120,7 +120,7 @@ def timeseries_plots(fname, plottingyaml):
             for n, k in enumerate(keys):
                 _log.debug(f'key {k}')
                 print(f'key {k}')
-                if config['timeseries'][k] == 'True':
+                if (config['timeseries'][k] == 'True') and (k in ds):
                     ax = axs[n]
                     if ax == axs[1]:
                         ax.set_xlim(30,35) #jp hardcode?
@@ -252,6 +252,8 @@ def timeseries_plots(fname, plottingyaml):
         ax = axs[0]
 
         good = ~np.isnan(ds.salinity)
+        if len(good) < 2:
+            return
         smin, smax = _autoclim(ds.salinity[good])
         good = ~np.isnan(ds.temperature)
         tmin, tmax = _autoclim(ds.temperature[good])
@@ -325,6 +327,9 @@ def grid_plots(fname, plottingyaml):
                                 sharex=True, sharey=True, constrained_layout=True)
         axs = axs.flat
         for n, k in enumerate(keys):
+            if not k in ds.keys():
+                _log.warning(f'{k} not in dataset')
+                continue
             _log.debug(f'key {k}')
             pconf = config['pcolor']['vars'][k]
             _log.debug(pconf)
@@ -469,7 +474,7 @@ def overview_plot(fname, plottingyaml, location='LineP',
             to_try = ['temperature','oxygen_concentration', 'chlorophyll', 'backscatter_700', 'cdom', 'salinity']
         new_keys = []
         for key in to_try:
-            if key in keys:
+            if (key in keys) and (key in ds.keys()):
                 new_keys += [key]
         keys = new_keys[:3]
         # get the max depth that data is at:
@@ -480,6 +485,7 @@ def overview_plot(fname, plottingyaml, location='LineP',
                                 constrained_layout=True)
         axs = axs.flat
         for n, k in enumerate(keys):
+
             _log.debug(f'key {k}')
             pconf = config['pcolor']['vars'][k]
             _log.debug(pconf)

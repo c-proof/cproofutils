@@ -15,48 +15,75 @@ import matplotlib.pyplot as plt
 
 def get_line_info(linename):
 
-    if linename == 'calvert':
-        inst = """#Koeye -12753.3  5145.5
-        #QCS01 -12814.3000   5142.3300
-        #MPA4 -12839.6300   5124.5600
-        #XSM -12907.5200   5118.8100
-        #Shelf -12951.3300   5104.8700
-        #Turn -13303.578   4956.457
-        #P16 -13440.0       4917.0"""
+    if linename == 'linep':
+        inst = """#Tofino -12602.988  4856.826
+        #P4 -12640.0000   4839.0000
+        #P5 -12710.0000   4841.5000
+        #P6 -12740.0000   4844.6000
+        #P7 -12810.0000   4846.6000
+        #P8 -12840.0000   4849.0000
+        #P9 -12910.0000   4851.4000
+        #P10 -12940.0000   4853.6000
+        #P11 -13010.0000   4856.0000
+        #P12 -13040.0000   4858.2000
+        #P13 -13140.0000   4902.6000
+        #P14 -13240.0000   4907.4000
+        #P15 -13340.0000   4912.0000
+        #P16 -13440.0000   4917.0000
+        #P17 -13540.0000   4921.0000
+        #P18 -13640.0000   4926.0000
+        #P19 -13740.0000   4930.0000
+        #P20 -13840.0000   4934.0000
+        #P21 -13940.0000   4938.0000
+        #P22 -14040.0000   4942.0000
+        #P23 -14140.0000   4946.0000
+        #P24 -14240.0000   4950.2000
+        #P25 -14336.3000   5000.0000
+        #P35 -14418.2000   5000.0000
+        #P26 -14500.0000   5000.0000"""
+    elif linename == 'LCshort':
+        inst = """#Tofino -12602.988  4856.826
+        #LC00 -12640.0000 4815.01
+        #LC01 -12735.9200 4750.9500"""
+    elif linename == 'South'
+        inst = """#Tofino -12602.988  4856.826
+        #P4 -12640.0000   4839.0000
+        #South -13333.0000 4600.01
+        """
 
     f = io.StringIO(inst)
-    Calvert = {}
-    Calvert['wps'] = None
-    Calvert['nm']  = []
+    lineP = {}
+    lineP['wps'] = None
+    lineP['nm']  = []
     for line in f:
         st = line.strip().split(' ')
         print(st)
         lon = pgutils.nmea2deg(float(st[1]))
         lat = pgutils.nmea2deg(float(st[-1]))
-        if Calvert['wps'] is None:
-            Calvert['wps'] = np.array([[lat, lon]])
+        if lineP['wps'] is None:
+            lineP['wps'] = np.array([[lat, lon]])
         else:
-            Calvert['wps'] = np.append(Calvert['wps'], np.array([[lat, lon]]), axis=0)
-        Calvert['nm'] += [st[0][1:]]
+            lineP['wps'] = np.append(lineP['wps'], np.array([[lat, lon]]), axis=0)
+        lineP['nm'] += [st[0][1:]]
 
     # get distances
-    dist = np.zeros(len(Calvert['wps']))
-    dist, ang  = seawater.extras.dist(Calvert['wps'][:, 0], Calvert['wps'][:, 1])
+    dist = np.zeros(len(lineP['wps']))
+    dist, ang  = seawater.extras.dist(lineP['wps'][:, 0], lineP['wps'][:, 1])
     dist = np.cumsum(np.append([0], dist))
     dist = dist - dist[1]
-    Calvert['dist'] = -dist  # make QCS01 = 0, and negative to west
-    return Calvert
+    lineP['dist'] = -dist  # make P4 = 0, and negative to west
+    return lineP
 
 
-def plotCalvertMissionMap(figdir='./figs/', linename='calvert',
-                        outname='CalvertMissionMap.png', dpi=200, logdir='./logs',
-                        lonlim=[-132, -126.5], latlim=[50.5, 52],
+def plotLinePMissionMap(figdir='./figs/', linename='linep',
+                        outname='LinePMissionMap.png', dpi=200, logdir='./logs',
+                        lonlim=[-145.2, -124.4], latlim=[46.1, 52.2],
                         topofile = '~cproof/Sites/gliderdata/smith_sandwell_topo_v8_2.nc',
-                        start=np.datetime64('1970-01-01')):
+                        starttime='2010-01-01'):
 
     utcnow = datetime.datetime.utcnow()
 
-    Calvert = get_line_info(linename=linename)
+    lineP = get_line_info(linename=linename)
 
     # get positions, times, and ampH from logfiles:
     fns = glob.glob(f'{logdir}/*.log')
@@ -64,13 +91,12 @@ def plotCalvertMissionMap(figdir='./figs/', linename='calvert',
     print(fns)
     glider = parse_logfiles(fns)
     glider = glider.dropna(dim='surfacing')
-    print(glider)
-    glider = glider.sel(surfacing=(glider.time>start))
-    print(glider)
     # get a distance along line.  Simple interp in lon which is prob OK here
-    glider['Calvertdist'] = ('surfacing', np.interp(glider['lon'],
-                            Calvert['wps'][::-1, -1], Calvert['dist'][::-1]))
-
+    glider['LinePdist'] = ('surfacing', np.interp(glider['lon'],
+                            lineP['wps'][::-1, -1], lineP['dist'][::-1]))
+    glider = glider.where(glider.time >= np.datetime64(starttime))
+    print(glider.time[0].values)
+    print(glider.time[-1].values)
     # make a 6-h interp of this...
     dt = np.timedelta64(6*3600, 's')
     time = np.arange(glider.time[-1].values, glider.time[0].values, -dt)[::-1]
@@ -85,13 +111,13 @@ def plotCalvertMissionMap(figdir='./figs/', linename='calvert',
     glider6h['head'] = ('timemid', np.mod(ang-270, 360))
     glider6h['speed'] = glider6h['dist'] / dt.astype(float) * 24 * 3600  # km/d
     glider6h['ampHperday'] = ('timemid', glider6h.ampH.diff(dim='time').values / dt.astype(float) * 24 * 3600)
-    glider6h['distCalvert'] = ('time', np.interp(glider6h['lon'], Calvert['wps'][::-1, -1], Calvert['dist'][::-1]))
-    glider6h['speedCalvert'] = ('timemid', glider6h.distCalvert.diff(dim='time').values / dt.astype(float) * 24 * 3600)
+    glider6h['distLineP'] = ('time', np.interp(glider6h['lon'], lineP['wps'][::-1, -1], lineP['dist'][::-1]))
+    glider6h['speedLineP'] = ('timemid', glider6h.distLineP.diff(dim='time').values / dt.astype(float) * 24 * 3600)
 
-    inds = min(5, len(glider6h.speedCalvert))
-    latestCalvertspeed = np.mean(glider6h.speedCalvert[-inds:].values)
+    inds = min(5, len(glider6h.speedLineP))
+    latestLinePspeed = np.mean(glider6h.speedLineP[-inds:].values)
     latestAmpHperday = np.mean(glider6h.ampHperday[-inds:].values)
-    latestAmpHper100km = np.abs(latestAmpHperday / latestCalvertspeed * 100)
+    latestAmpHper100km = np.abs(latestAmpHperday / latestLinePspeed * 100)
 
     # string with current time:
     timest = f'{glider6h.time.values[-1]}'[:16]
@@ -103,23 +129,21 @@ def plotCalvertMissionMap(figdir='./figs/', linename='calvert',
     sincelast = str(sincelast)[:-10]
 
     # figure out how far we have to go:
-    total = (Calvert['dist'][0] - Calvert['dist'][-1]) * 2
-    dist_to_Calvert = glider6h.distCalvert[-1] - Calvert['dist'][-1]
-    print(total, dist_to_Calvert.values)
-
-    if (len(glider6h.speedCalvert) > 6) and (glider6h.speedCalvert[-6] > 0):
+    total = (lineP['dist'][0] - lineP['dist'][-1]) * 2
+    dist_to_lineP = glider6h.distLineP[-1] - lineP['dist'][-1]
+    print(total, dist_to_lineP.values)
+    if glider6h.lon.min() < -144.5 and glider6h.speedLineP[-6] > 0:
         # we are returning
-        dist_to_go = Calvert['dist'][0] - glider6h.distCalvert[-1]
+        dist_to_go = lineP['dist'][0] - glider6h.distLineP[-1]
     else:
-        dist_to_go = total / 2 + dist_to_Calvert
+        dist_to_go = total / 2 + dist_to_lineP
 
     # arrival time:
     try:
-        predTime = glider6h.time[-1].values + np.timedelta64(int(dist_to_go / np.abs(latestCalvertspeed) * 24 * 3600), 's')
+        predTime = glider6h.time[-1].values + np.timedelta64(int(dist_to_go / np.abs(latestLinePspeed) * 24 * 3600), 's')
         predTime = f'{predTime}'[:10]
     except (OverflowError):
         predTime ='Bad data'
-
 
     # Plots:
 
@@ -128,38 +152,38 @@ def plotCalvertMissionMap(figdir='./figs/', linename='calvert',
 
     axs[0].plot(glider6h.timemid, glider6h.speed, label='Absolute Speed')
     axs[0].plot(glider6h.timemid, -glider6h.speed, color='C0')
-    axs[0].plot(glider6h.timemid, glider6h.speedCalvert, label='Speed along Line')
-    axs[0].plot(glider6h.timemid[-inds:], latestCalvertspeed * np.ones(inds), color='C1', alpha=0.5, lw=4)
-    text = f'Latest speed (30 h): {latestCalvertspeed:1.1f} km/d\n'
+    axs[0].plot(glider6h.timemid, glider6h.speedLineP, label='Speed along Line')
+    axs[0].plot(glider6h.timemid[-inds:], latestLinePspeed * np.ones(inds), color='C1', alpha=0.5, lw=4)
+    text = f'Latest speed (30 h): {latestLinePspeed:1.1f} km/d\n'
     text += f'Predicted return time: {predTime}'
     axs[0].text(0.1, 0.5, text,
                 transform=axs[0].transAxes)
     axs[0].grid('True')
     axs[0].legend()
     axs[0].set_ylabel('Speed [km/d]')
-    axs[0].set_ylim([-50, 50])
+    axs[0].set_ylim([-40, 40])
     axs[0].set_title(f'{timest}; Processed: {str(utcnow)[:16]}\n{sincelast} since last update')
 
     axs[1].plot(glider6h.timemid, glider6h.ampHperday)
     axs[1].plot(glider6h.timemid[-inds:], latestAmpHperday * np.ones(inds), color='C0', alpha=0.5, lw=4)
     axs[1].grid('True')
     axs[1].set_ylabel('AmpH/d')
-    axs[1].set_ylim(bottom=0, top=15)
+    axs[1].set_ylim(bottom=0, top=10)
     text =  f'Latest [30 h]:  {latestAmpHperday:4.1f} AmpH/d\n'
-    text += f'Used [230 Amph] {glider6h.ampH.values[-1]:4.1f} Amph\n'
-    text += f'Percent used:   {glider6h.ampH.values[-1] / 2.3:4.1f}%'
+    text += f'Used [500 Amph] {glider6h.ampH.values[-1]:4.1f} Amph\n'
+    text += f'Percent used:   {glider6h.ampH.values[-1] / 5:4.1f}%'
     axs[1].text(0.05, 0.1, text, family='monospace', fontsize='medium',
                         transform=axs[1].transAxes)
 
     axs[2].plot(glider6h.timemid, 100 * glider6h.ampHperday/glider6h.speed)
-    axs[2].plot(glider6h.timemid, np.abs(100 * glider6h.ampHperday/glider6h.speedCalvert))
+    axs[2].plot(glider6h.timemid, np.abs(100 * glider6h.ampHperday/glider6h.speedLineP))
     axs[2].plot(glider6h.timemid[-inds:], latestAmpHper100km * np.ones(inds), color='C1', alpha=0.5, lw=4)
-    axs[2].set_ylim([0, 100])
+    axs[2].set_ylim([0, 40])
     axs[2].grid('True')
     axs[2].set_ylabel('AmpH / 100 km')
 
     predAH = glider6h.ampH[-1].values + latestAmpHper100km*dist_to_go.values / 100
-    print(dist_to_go / np.abs(latestCalvertspeed))
+    print(dist_to_go / np.abs(latestLinePspeed))
     text = f'Latest [30 h]:  {latestAmpHper100km:4.1f} AmpH/100km\n'
     text += f'Predicted total AmpH: {predAH:1.0f} Amph'
     axs[2].text(0.05, 0.1, text, family='monospace', fontsize='medium',
@@ -170,7 +194,7 @@ def plotCalvertMissionMap(figdir='./figs/', linename='calvert',
     with xr.open_dataset(topofile) as ds:
         # longitude, latitiude, ROSE
         ds = ds.sel(longitude=slice(-145.2 + 360, -124+360))
-        ind = np.where((ds.latitude < 52.2) & (ds.latitude > 46.0))[0]
+        ind = np.where((ds.latitude < 52.2) & (ds.latitude > 45.0))[0]
         ds = ds.sel(latitude=slice(46, 52.5))
         ds['longitude'] = ds.longitude - 360
 
@@ -180,14 +204,14 @@ def plotCalvertMissionMap(figdir='./figs/', linename='calvert',
     ax.set_xlim(lonlim)
     ax.set_aspect(1/np.cos(49 * np.pi / 180))
 
-    td = list(range(1, len(Calvert['wps']), 1))
+    td = list(range(1, len(lineP['wps']), 4))
     td = [0] + td + [-1]
     for wpind in td:
-        ax.plot(Calvert['wps'][wpind, 1], Calvert['wps'][wpind, 0], 'd', color='C1')
+        ax.plot(lineP['wps'][wpind, 1], lineP['wps'][wpind, 0], 'd', color='C1')
 
-        ax.text(Calvert['wps'][wpind, 1],
-                Calvert['wps'][wpind, 0],
-                f" {Calvert['nm'][wpind]} {Calvert['dist'][wpind]:1.0f} km",
+        ax.text(lineP['wps'][wpind, 1],
+                lineP['wps'][wpind, 0],
+                f" {lineP['nm'][wpind]} {lineP['dist'][wpind]:1.0f} km",
                 color='C1', rotation=60, fontsize='smaller')
     ax.plot(glider.lon, glider.lat, 'm.', markersize=1)
     ax.plot(glider.lon[-1], glider.lat[-1], 'go', markersize=6)

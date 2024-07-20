@@ -5,9 +5,11 @@ import xarray as xr
 import numpy as np
 from jinja2 import Environment, FileSystemLoader
 import geojson
+import json
 import datetime
 import simplekml
 import pyglider.utils as pygu
+from pathlib import Path
 
 import logging
 
@@ -130,15 +132,46 @@ def ticker(dir):
 
     with open('/Users/cproof/processing/deployments/Totals.html', 'w') as output_file:
         outstr = f"""
-<p style="color:white;font-size:14pt;background-color:#888888">
-Between {str(t0.values)[:10]} and {str(tf.values)[:10]}, our gliders have traveled {int(sump):,} km and
+Between {str(t0)[:10]} and {str(tf)[:10]}, our gliders have traveled {int(sump):,} km and
 made {int(nprofiles):,} CTD, O2, and optics casts, over {int(totaltime):,} days at sea.
-</p>
 """
         _log.info(outstr)
         output_file.write(outstr)
 
 #######
+
+def update_active_json(glider, mission):
+    file_path = './active_deployments_new.json'
+    new_data = ( glider + '/'
+                + mission + '/figs/overview_pcolor_' + mission +'.png')
+    if not os.path.exists(new_data):
+        _log.warning('Image %s not found', new_data)
+        return
+    new_data = 'https://cproof.uvic.ca/gliderdata/deployments/' + new_data
+    if os.path.exists(file_path) and os.path.getsize(file_path) > 0:
+        # Read existing data
+        with open(file_path, 'r') as file:
+            try:
+                data = json.load(file)
+            except json.JSONDecodeError:
+                data = []
+    else:
+        # File does not exist or is empty
+        data = []
+
+    url = ('https://cproof.uvic.ca/gliderdata/deployments/' + glider + '/'
+                + mission + '/figs/overview_pcolor_' + mission +'.png')
+    new_data = {'url': url, 'duration': 600}
+    # Append new data
+    if isinstance(data, list):
+        data.append(new_data)
+    elif isinstance(data, dict):
+        data.update(new_data)
+
+    # Write updated data back to the file
+    with open(file_path, 'w') as file:
+        json.dump(data, file, indent=4)
+        _log.info('Wrote to %s', file_path)
 
 
 def index_deployments(dir, templatedir='./.templates/',
@@ -159,6 +192,8 @@ def index_deployments(dir, templatedir='./.templates/',
     file_loader = FileSystemLoader(templatedir)
     env = Environment(loader=file_loader)
     template = env.get_template('deploymentsIndex.html')
+
+    activef = open('./active_deployments_new.txt', 'a+')
 
     subdirs = glob.glob(dir + '/*')
     atts = []
@@ -195,32 +230,34 @@ def index_deployments(dir, templatedir='./.templates/',
                 for n, fig in enumerate(figs):
                     figs[n] = './figs/' + os.path.split(fig)[1]
                     _log.info(figs[n])
-                nc = glob.glob(d+'/L0-timeseries/*.nc')
-                ncdelayed = glob.glob(d + '/L0-timeseries/*_delayed.nc')
+                nc = glob.glob(d+'/L0-timeseries/dfo-*.nc')
+                ncdelayed = glob.glob(d + '/L0-timeseries/dfo-*_delayed.nc')
                 hasdelayed = len(ncdelayed) > 0
-                nccorrected = glob.glob(d + '/L0-timeseries/*_corrected.nc')
+                nccorrected = glob.glob(d + '/L0-timeseries/dfo-*_corrected.nc')
                 hascorrected = len(nccorrected) > 0
                 template = templateNew
 
                 if len(nc) < 1:
                     # try old style
-                    nc = glob.glob(d+'/L1-timeseries/*.nc')
+                    nc = glob.glob(d+'/L1-timeseries/dfo-*.nc')
                     template = templateOld
                     if len(nc) < 1:
                         continue
                 with xr.open_dataset(nc[0]) as ds:
+                    _log.debug('Opening %s', nc[0])
                     att = ds.attrs
-                    _log.debug(type(ds.keys()))
+                    #_log.debug(type(ds.keys()))
                     keys = []
                     units = []
                     for key in ds.keys():
-                        _log.debug(ds[key].attrs)
+                        #_log.debug(ds[key].attrs)
                         try:
                             unit = ds[key].attrs['units']
                         except KeyError:
                             unit = 'no units'
                         keys.append(key + ' [' + unit +']')
                 depname = att['deployment_name']
+                glider = depname[:-9]
                 ovp = glob.glob(d+f'/figs/overview_pcolor_{depname}.png')
                 hasoverviewplot = len(ovp) > 0
                 if hasoverviewplot:
@@ -234,8 +271,17 @@ def index_deployments(dir, templatedir='./.templates/',
                     hasoverviewplot=hasoverviewplot)
                 with open(d + '/index.html', 'w') as fout:
                     fout.write(output)
+                # output to active_deployments.txt if active...
+                if ds['time'].max() > np.datetime64(datetime.datetime.now()) - np.timedelta64(2, 'D'):
+                    _log.debug('ACTIVE: %s', depname)
+                    activef.write(d[2:]+'\n')
+                    update_active_json(glider, depname)
+                else:
+                    _log.debug('INACTIVE: %s %s', depname, ds['time'][-1].values)
+
             else:
                 pass
+    activef.close()
 
 def geojson_deployments(dir, outfile='cproof-deployments.geojson'):
     props = ['deployment_start', 'deployment_end', 'platform_type',
@@ -325,9 +371,7 @@ def geojson_deployments(dir, outfile='cproof-deployments.geojson'):
                                     name=att['deployment_name'],
                                     )
                                 ls.timespan.begin = f'{ds.time.values[0]}'[:-3]
-                                print('@@@@@@@@BEGIN', ls.timespan.begin)
                                 ls.timespan.end = f'{ds.time.values[-1]}'[:-3]
-                                print(ls.timespan.end)
                                 ls.style.linestyle.color = 'ee' + '%02X%02X%02X' %  (cols[2], cols[1], cols[0])
                                 ls.style.linestyle.width = 3;
                                 kml.save(d2[2:]+'/'+att['deployment_name']+'.kml')
@@ -381,6 +425,42 @@ def geojson_deployments(dir, outfile='cproof-deployments.geojson'):
     with open('cproof-deployments_all.geojson', 'w') as fout:
         s = geojson.dumps(feature_collection)
         fout.write(s)
+
+
+def link_all_grids(dir):
+    dir = Path(dir)
+    subdirs = list(dir.glob('*'))
+
+    for d in subdirs:
+        _log.info(d)
+        if not d.is_dir():
+            continue
+        subdirs2 = list(d.glob('*'))
+
+        for d2 in subdirs2:
+            _log.info(d2)
+            if not d2.is_dir():
+                continue
+            ncr = None
+            d2 = d2 / Path('L0-gridfiles')
+            nc = list(d2.glob('dfo-*grid_corrected.nc'))
+            if len(nc) < 1:
+                nc = list(d2.glob('dfo-*grid_delayed.nc'))
+            if len(nc) < 1:
+                nc = list(d2.glob('dfo-*grid.nc'))
+            if len(nc) == 1:
+                ncr = nc[0]
+
+            if ncr:
+                print('name', str(ncr.name))
+                target = Path('/Users/cproof/processing/deployments/allgrids/'+str(ncr.name))
+                print('Target', target)
+                print('Exists', target.exists())
+                print('Exists', target.is_symlink())
+                if target.is_symlink():
+                    target.unlink()
+                _log.debug('liniking %s', ncr.resolve())
+                target.symlink_to(ncr.resolve())
 
 
 def make_wget_txt(dir, outfile='mission_all.txt', comment_str=None,
