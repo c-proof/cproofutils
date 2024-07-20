@@ -12,17 +12,18 @@ import xarray as xr
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
+from cproofutils.waypointdistance import get_simple_distance
 
 def get_line_info(linename):
 
-    if linename == 'calvert':
+    if linename == 'swot':
         inst = """#Koeye -12753.3  5145.5
         #QCS01 -12814.3000   5142.3300
         #MPA4 -12839.6300   5124.5600
         #XSM -12907.5200   5118.8100
         #Shelf -12951.3300   5104.8700
-        #Turn -13303.578   4956.457
-        #P16 -13440.0       4917.0"""
+        #North -13018.2000 5055.0100
+        #South -12855.14  4751.44"""
 
     f = io.StringIO(inst)
     Calvert = {}
@@ -48,7 +49,7 @@ def get_line_info(linename):
     return Calvert
 
 
-def plotCalvertMissionMap(figdir='./figs/', linename='calvert',
+def plotCalvertMissionMap(figdir='./figs/', linename='swot',
                         outname='CalvertMissionMap.png', dpi=200, logdir='./logs',
                         lonlim=[-132, -126.5], latlim=[50.5, 52],
                         topofile = '~cproof/Sites/gliderdata/smith_sandwell_topo_v8_2.nc',
@@ -61,15 +62,15 @@ def plotCalvertMissionMap(figdir='./figs/', linename='calvert',
     # get positions, times, and ampH from logfiles:
     fns = glob.glob(f'{logdir}/*.log')
     fns.sort()
-    print(fns)
+    print('filenames:', fns)
     glider = parse_logfiles(fns)
     glider = glider.dropna(dim='surfacing')
-    print(glider)
     glider = glider.sel(surfacing=(glider.time>start))
     print(glider)
     # get a distance along line.  Simple interp in lon which is prob OK here
-    glider['Calvertdist'] = ('surfacing', np.interp(glider['lon'],
-                            Calvert['wps'][::-1, -1], Calvert['dist'][::-1]))
+    #glider['Calvertdist'] = ('surfacing', np.interp(glider['lon'],
+    #                        Calvert['wps'][::-1, -1], Calvert['dist'][::-1]))
+
 
     # make a 6-h interp of this...
     dt = np.timedelta64(6*3600, 's')
@@ -82,10 +83,15 @@ def plotCalvertMissionMap(figdir='./figs/', linename='calvert',
         glider6h[todo] = ('time', np.interp(glider6h.time, glider.time, glider[todo]))
     dist, ang = seawater.extras.dist(glider6h['lat'], glider6h['lon'])
     glider6h['dist'] = ('timemid', dist)
+    print('dist', dist)
     glider6h['head'] = ('timemid', np.mod(ang-270, 360))
     glider6h['speed'] = glider6h['dist'] / dt.astype(float) * 24 * 3600  # km/d
     glider6h['ampHperday'] = ('timemid', glider6h.ampH.diff(dim='time').values / dt.astype(float) * 24 * 3600)
-    glider6h['distCalvert'] = ('time', np.interp(glider6h['lon'], Calvert['wps'][::-1, -1], Calvert['dist'][::-1]))
+    along, across, segment = get_simple_distance(glider6h.lon, glider6h.lat,
+                                                 Calvert['wps'][:, 1], Calvert['wps'][:, 0],
+                                                 central_lat=49.5)
+    along = along / 1e3
+    glider6h['distCalvert'] = ('time', along)
     glider6h['speedCalvert'] = ('timemid', glider6h.distCalvert.diff(dim='time').values / dt.astype(float) * 24 * 3600)
 
     inds = min(5, len(glider6h.speedCalvert))
@@ -106,8 +112,7 @@ def plotCalvertMissionMap(figdir='./figs/', linename='calvert',
     total = (Calvert['dist'][0] - Calvert['dist'][-1]) * 2
     dist_to_Calvert = glider6h.distCalvert[-1] - Calvert['dist'][-1]
     print(total, dist_to_Calvert.values)
-
-    if (len(glider6h.speedCalvert) > 6) and (glider6h.speedCalvert[-6] > 0):
+    if glider6h.speedCalvert[-6] > 0:
         # we are returning
         dist_to_go = Calvert['dist'][0] - glider6h.distCalvert[-1]
     else:
@@ -191,10 +196,11 @@ def plotCalvertMissionMap(figdir='./figs/', linename='calvert',
                 color='C1', rotation=60, fontsize='smaller')
     ax.plot(glider.lon, glider.lat, 'm.', markersize=1)
     ax.plot(glider.lon[-1], glider.lat[-1], 'go', markersize=6)
-
-    text = f'Distance travelled: {(total - dist_to_go.values):1.0f} km\n'
-    text += f'Distance to go: {dist_to_go.values:1.0f} km'
-    ax.text(0.05, 0.1, text, family='monospace', fontsize='medium',
-                            transform=ax.transAxes, bbox={'facecolor':[1, 1, 1]})
+    ax.text(glider.lon[-1], glider.lat[-1], f'  {glider6h.distCalvert[-1].values:1.0f} km', fontsize='medium', color='g')
+    if False:
+        text = f'Distance travelled: {(total - dist_to_go.values):1.0f} km\n'
+        text += f'Distance to go: {dist_to_go.values:1.0f} km'
+        ax.text(0.05, 0.1, text, family='monospace', fontsize='medium',
+                                transform=ax.transAxes, bbox={'facecolor':[1, 1, 1]})
 
     fig.savefig(f'{figdir}/{outname}', dpi=dpi)

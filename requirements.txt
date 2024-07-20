@@ -1,0 +1,8 @@
+pandas
+argopandas
+# pyarrow==6.0.1
+geojson
+simplekml
+matplotlib
+cmocean
+seawater
